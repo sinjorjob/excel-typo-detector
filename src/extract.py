@@ -23,12 +23,6 @@ class CellData:
     row: int
     column: int
     text: str
-    text_norm: Optional[str] = None
-    
-    def __post_init__(self):
-        """初期化後処理"""
-        if self.text_norm is None:
-            self.text_norm = self.text
 
 
 class ExcelExtractor:
@@ -236,8 +230,7 @@ class ExcelExtractor:
                     'cell_address': cell.cell_address,
                     'row': cell.row,
                     'column': cell.column,
-                    'text': cell.text,
-                    'text_norm': cell.text_norm
+                    'text': cell.text
                 })
             
             df = pd.DataFrame(data)

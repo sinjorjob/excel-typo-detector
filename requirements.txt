@@ -4,7 +4,6 @@ openpyxl==3.1.5
 XlsxWriter==3.2.0
 
 # Japanese Text Processing
-neologdn==0.5.2
 janome==0.5.0
 
 # String Similarity

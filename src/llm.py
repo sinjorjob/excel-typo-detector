@@ -99,7 +99,7 @@ class LLMReviewer:
         self.model = self.llm_config.get('model', 'claude-3-sonnet-20240229')
         self.max_tokens = self.llm_config.get('max_tokens', 1000)
         self.temperature = self.llm_config.get('temperature', 0.1)
-        self.batch_size = self.llm_config.get('batch_size', 20)
+        self.batch_size = self.llm_config.get('batch_size', 20)  # シート単位では使用しない（後方互換性のため保持）
         self.min_confidence = self.llm_config.get('min_confidence', 0.70)
         
         # APIクライアントの初期化
@@ -286,7 +286,7 @@ JSONスキーマ:
     
     def review_all_cells(self, cells: List[CellData]) -> List[LLMReviewResponse]:
         """
-        全セルを直接LLMでレビュー（誤字脱字検出）
+        全セルをシート単位でLLMレビュー（誤字脱字検出）
         
         Args:
             cells: セルデータのリスト
@@ -299,25 +299,55 @@ JSONスキーマ:
             return []
         
         # 空のセルや短すぎるセルを除外
-        valid_cells = [cell for cell in cells if cell.text_norm and len(cell.text_norm.strip()) >= 2]
+        valid_cells = [cell for cell in cells if cell.text and len(cell.text.strip()) >= 2]
         
         if not valid_cells:
             logger.info("No valid cells found for LLM review")
             return []
         
-        logger.info(f"Reviewing {len(valid_cells)} cells directly with LLM")
+        logger.info(f"Reviewing {len(valid_cells)} cells with LLM (sheet-based batching)")
         
-        # バッチ処理
+        # シート単位でグルーピング
+        sheet_groups = self._group_cells_by_sheet(valid_cells)
+        
         all_responses = []
+        total_requests = len(sheet_groups)
         
-        for i in range(0, len(valid_cells), self.batch_size):
-            batch = valid_cells[i:i + self.batch_size]
-            batch_responses = self._process_cell_batch(batch)
-            all_responses.extend(batch_responses)
+        for i, (sheet_key, sheet_cells) in enumerate(sheet_groups.items(), 1):
+            logger.info(f"Processing sheet {i}/{total_requests}: {sheet_key} ({len(sheet_cells)} cells)")
             
-            logger.debug(f"Processed batch {i//self.batch_size + 1}/{(len(valid_cells)-1)//self.batch_size + 1}")
+            # シート内のセルを一度にLLMに送信
+            sheet_responses = self._process_cell_batch(sheet_cells)
+            all_responses.extend(sheet_responses)
+            
+            logger.debug(f"Completed sheet {sheet_key}: {len(sheet_responses)} issues found")
         
+        logger.info(f"Completed LLM review: {total_requests} requests, {len(all_responses)} total issues")
         return all_responses
+    
+    def _group_cells_by_sheet(self, cells: List[CellData]) -> Dict[str, List[CellData]]:
+        """
+        セルをシート単位でグルーピング
+        
+        Args:
+            cells: セルデータのリスト
+            
+        Returns:
+            シート単位でグルーピングされたセル辞書
+        """
+        from collections import defaultdict
+        
+        sheet_groups = defaultdict(list)
+        
+        for cell in cells:
+            # ファイル名:シート名 でグルーピング
+            sheet_key = f"{cell.file_name}:{cell.sheet_name}"
+            sheet_groups[sheet_key].append(cell)
+        
+        # セル数でソート（小さいシートから処理）
+        sorted_groups = dict(sorted(sheet_groups.items(), key=lambda x: len(x[1])))
+        
+        return sorted_groups
 
     def review_detection_results(self, results: List[DetectionResult]) -> List[LLMReviewResponse]:
         """
@@ -964,7 +994,7 @@ JSONスキーマ:
         
         for i, cell in enumerate(cells):
             location = f"{cell.file_name}:{cell.sheet_name}:{cell.cell_address}"
-            prompt_parts.append(f"\n項目{i+1} ({location}):\n{cell.text_norm}")
+            prompt_parts.append(f"\n項目{i+1} ({location}):\n{cell.text}")
         
         prompt_parts.append("""\n
 各項目について以下のJSONスキーマで応答してください：
@@ -1048,12 +1078,12 @@ JSONスキーマ:
                     fake_detection = DetectionResult(
                         cell_data=cell,
                         issue_type=final_issue_enum,
-                        original=cell.text_norm,
+                        original=cell.text,
                         suggested_fix=suggested_fix,
                         canonical=canonical,
                         confidence=confidence,
                         reason="LLM直接レビュー",
-                        context=cell.text_norm,
+                        context=cell.text,
                         related_terms=[]
                     )
                     

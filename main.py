@@ -22,7 +22,6 @@ load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.extract import ExcelExtractor
-from src.normalize import TextNormalizer
 from src.mechanical_detector import MechanicalDetector
 from src.llm import LLMReviewer
 from src.report import ReportGenerator
@@ -47,7 +46,6 @@ class ExcelChecker:
         
         # 各モジュールの初期化
         self.extractor = None
-        self.normalizer = None
         self.mechanical_detector = None
         self.llm_reviewer = None
         self.reporter = None
@@ -103,15 +101,11 @@ class ExcelChecker:
         self.extractor = ExcelExtractor(self.config)
         logger.debug("Excel extractor initialized")
         
-        # 2. Normalizer
-        self.normalizer = TextNormalizer()
-        logger.debug("Text normalizer initialized")
-        
-        # 3. Mechanical Detector
+        # 2. Mechanical Detector
         self.mechanical_detector = MechanicalDetector()
         logger.debug("Mechanical detector initialized")
         
-        # 4. LLM Reviewer (メイン機能)
+        # 3. LLM Reviewer (メイン機能)
         llm_config = self.config.get('llm', {})
         if llm_config.get('enabled', False):
             try:
@@ -125,7 +119,7 @@ class ExcelChecker:
             logger.error("LLM is disabled in config, but it's required for this tool")
             sys.exit(1)
         
-        # 5. Reporter
+        # 4. Reporter
         output_dir = self.config.get('output', {}).get('dir', 'data/output')
         self.reporter = ReportGenerator(self.config, output_dir)
         logger.debug("Report generator initialized")
@@ -146,7 +140,7 @@ class ExcelChecker:
         logger.info(f"Starting file processing: {input_path}")
         
         # 1. ファイル抽出
-        logger.info("Step 1/7: Extracting cells from Excel files...")
+        logger.info("Step 1/6: Extracting cells from Excel files...")
         if Path(input_path).is_file():
             cells = self.extractor.extract_from_file(input_path)
         else:
@@ -158,24 +152,18 @@ class ExcelChecker:
         
         logger.info(f"Extracted {len(cells)} cells")
         
-        # 2. テキスト正規化
-        logger.info("Step 2/7: Normalizing text...")
-        cells = self.normalizer.normalize_cells(cells)
-        norm_stats = self.normalizer.get_normalization_stats(cells)
-        logger.info(f"Normalized {norm_stats['normalized_cells']}/{norm_stats['total_cells']} cells")
-        
-        # 3. 機械的検出（全角/半角表記ゆれ）
-        logger.info("Step 3/7: Mechanical detection of notation variants...")
+        # 2. 機械的検出（全角/半角表記ゆれ）
+        logger.info("Step 2/6: Mechanical detection of notation variants...")
         mechanical_results = self.mechanical_detector.detect_normalization_variants(cells)
         mechanical_stats = self.mechanical_detector.get_detection_statistics(mechanical_results)
         logger.info(f"Mechanical detection found {len(mechanical_results)} notation variants")
         
-        # 4. LLMレビュー（メイン処理）
+        # 3. LLMレビュー（メイン処理）
         llm_results = []
         llm_stats = {}
         
         if enable_llm and self.llm_reviewer:
-            logger.info("Step 4/7: LLM review of all cells...")
+            logger.info("Step 3/6: LLM review of all cells...")
             try:
                 llm_results = self.llm_reviewer.review_all_cells(cells)
                 llm_stats = self.llm_reviewer.get_review_statistics(llm_results)
@@ -187,17 +175,16 @@ class ExcelChecker:
             logger.error("LLM review is required but not available")
             raise RuntimeError("LLM reviewer is required")
         
-        # 5. 結果の統合（重複除去）
-        logger.info("Step 5/7: Merging detection results...")
+        # 4. 結果の統合（重複除去）
+        logger.info("Step 4/6: Merging detection results...")
         all_results = self._merge_detection_results(mechanical_results, llm_results)
         logger.info(f"Total unique issues after merging: {len(all_results)}")
         
-        # 6. レポート生成
-        logger.info("Step 6/7: Generating reports...")
+        # 5. レポート生成
+        logger.info("Step 5/6: Generating reports...")
         
         # 統計情報
         combined_stats = {
-            'normalization': norm_stats,
             'mechanical_detection': mechanical_stats,
             'llm_review': llm_stats,
             'processing_time': time.time() - self.start_time
@@ -211,9 +198,9 @@ class ExcelChecker:
         
         logger.info(f"Generated {len(generated_files)} report files")
         
-        # 7. 完了
+        # 6. 完了
         total_time = time.time() - self.start_time
-        logger.info(f"Step 7/7: Processing completed in {total_time:.2f} seconds")
+        logger.info(f"Step 6/6: Processing completed in {total_time:.2f} seconds")
         
         # 結果サマリー
         result_summary = {

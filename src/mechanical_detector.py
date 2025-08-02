@@ -11,7 +11,6 @@ from pathlib import Path
 from loguru import logger
 
 from .extract import CellData
-from .normalize import TextNormalizer
 
 
 @dataclass
@@ -55,7 +54,6 @@ class TermOccurrence:
     row: int
     column: int
     original_text: str
-    normalized_text: str
 
 
 class MechanicalDetector:
@@ -66,7 +64,6 @@ class MechanicalDetector:
     
     def __init__(self, canonicals_path: str = "dict/canonicals.yml"):
         """初期化"""
-        self.normalizer = TextNormalizer()
         self.canonicals_path = canonicals_path
         self.canonical_rules = self._load_canonical_rules()
     
@@ -141,8 +138,8 @@ class MechanicalDetector:
                 if len(term.strip()) < 2:  # 短すぎる用語は除外
                     continue
                     
-                # 抽出した用語を正規化してキーとする
-                normalized_term = self.normalizer.normalize_text(term).lower()
+                # 抽出した用語をそのままキーとする（正規化なし）
+                normalized_term = term
                 
                 occurrence = TermOccurrence(
                     file_name=cell.file_name,
@@ -150,23 +147,22 @@ class MechanicalDetector:
                     cell_address=cell.cell_address,
                     row=cell.row,
                     column=cell.column,
-                    original_text=term,  # 正規化前の元の用語を保存
-                    normalized_text=normalized_term
+                    original_text=term  # 元の用語を保存
                 )
                 
-                term_occurrences[normalized_term].append(occurrence)
+                term_occurrences[term].append(occurrence)
         
         # 単一出現の用語は除外（表記ゆれは複数出現が前提）
         filtered_occurrences = {
-            norm_term: occurrences 
-            for norm_term, occurrences in term_occurrences.items() 
+            term: occurrences 
+            for term, occurrences in term_occurrences.items() 
             if len(occurrences) > 1
         }
         
         # デバッグ: 収集された用語の詳細出力
-        for norm_term, occurrences in filtered_occurrences.items():
+        for term, occurrences in filtered_occurrences.items():
             original_forms = [occ.original_text for occ in occurrences]
-            logger.debug(f"Term '{norm_term}': {original_forms}")
+            logger.debug(f"Term '{term}': {original_forms}")
         
         logger.debug(f"Collected {len(filtered_occurrences)} terms with multiple occurrences")
         return filtered_occurrences
@@ -209,7 +205,7 @@ class MechanicalDetector:
         """表記ゆれを検出"""
         inconsistencies = {}
         
-        for normalized_term, occurrences in term_occurrences.items():
+        for term, occurrences in term_occurrences.items():
             # 異なる表記のバリエーションを収集
             variants = defaultdict(list)
             for occurrence in occurrences:
@@ -217,24 +213,27 @@ class MechanicalDetector:
             
             # 複数の表記がある場合のみ不統一として検出
             if len(variants) > 1:
-                inconsistencies[normalized_term] = {
+                inconsistencies[term] = {
                     'variants': dict(variants),
-                    'canonical': self._get_canonical_form(normalized_term, list(variants.keys()))
+                    'canonical': self._get_canonical_form(term, list(variants.keys()))
                 }
         
         logger.debug(f"Detected {len(inconsistencies)} terms with inconsistent notation")
         return inconsistencies
     
-    def _get_canonical_form(self, normalized_term: str, variant_list: List[str]) -> Optional[str]:
+    def _get_canonical_form(self, term: str, variant_list: List[str]) -> Optional[str]:
         """正準形を取得"""
-        # variant_listの各項目がcanonical_rulesにあるかチェック
+        # variant_listの各項目がcanonical_rulesにあるかチェック（大文字小文字区別あり）
         for variant in variant_list:
+            if variant in self.canonical_rules:
+                return self.canonical_rules[variant]
+            # 小文字でもチェック（英単語用）
             if variant.lower() in self.canonical_rules:
                 return self.canonical_rules[variant.lower()]
         
-        # normalized_termでもチェック
-        if normalized_term in self.canonical_rules:
-            return self.canonical_rules[normalized_term]
+        # termでもチェック
+        if term in self.canonical_rules:
+            return self.canonical_rules[term]
         
         return None
     
@@ -242,7 +241,7 @@ class MechanicalDetector:
         """検出結果を生成"""
         results = []
         
-        for normalized_term, inconsistency_data in inconsistencies.items():
+        for term, inconsistency_data in inconsistencies.items():
             variants = inconsistency_data['variants']
             canonical = inconsistency_data['canonical']
             
