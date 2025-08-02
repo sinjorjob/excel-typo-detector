@@ -1,0 +1,49 @@
+# LLM誤字脱字検出ツール設定ファイル
+
+# アルゴリズム検出設定は削除済み（LLMレビューのみ使用）
+  
+# LLM設定
+llm:
+  enabled: true               # LLMレビューを有効にする
+  provider: "openai"          # anthropic or openai
+  model: "gpt-4o"        # OpenAIのモデル名
+  batch_size: 20              # 一度に処理する候補数
+  min_confidence: 0.70        # LLM判定の最小信頼度
+  max_tokens: 8000            # レスポンスの最大トークン数 (gpt-4o-miniは16K出力可能)
+  temperature: 0.1            # 生成のランダム性（低いほど一貫性高）
+  
+# 出力設定
+output:
+  review_book: "data/output/レビュー台帳.xlsx"
+  autofix_book: "data/output/自動修正案.xlsx"
+  llm_json: "data/output/llm_review.json"
+  enable_autofix: true        # 自動修正版の生成を有効にする
+  
+# 辞書ファイル設定
+dictionaries:
+  canonicals: "dict/canonicals.yml"
+  excludes: "dict/excludes.yml"
+  
+# ログ設定
+logging:
+  level: "INFO"               # DEBUG, INFO, WARNING, ERROR
+  file: "data/output/excel_checker.log"
+  llm_requests: "data/output/llm_requests.log"  # LLMリクエストログ
+  
+# 処理設定
+processing:
+  max_cells_per_sheet: 10000  # シートあたりの最大処理セル数
+  skip_empty_cells: true      # 空セルをスキップ
+  include_formulas: false     # 数式セルを含めるか
+  
+# 除外設定
+exclusions:
+  skip_sheets:                # スキップするシート名パターン
+    - "設定"
+    - "Config"
+    - "メモ"
+    - "Notes"
+  skip_cell_patterns:         # スキップするセル内容パターン
+    - "^=.*"                  # 数式セル
+    - "^[0-9]+$"             # 数値のみ
+    - "^[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+$"  # メールアドレス

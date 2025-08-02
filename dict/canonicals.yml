@@ -1,0 +1,14 @@
+# 表記ゆれの正準表記辞書
+# expected: 採用する正しい表記
+# patterns: 統一したい表記ゆれのパターン
+
+rules:
+  - expected: "ユーザー"
+    patterns: ["ユーザ", "ﾕｰｻﾞ", "ｕｓｅｒ"]
+    
+  - expected: "データベース"
+    patterns: ["DB", "ﾃﾞｰﾀﾍﾞｰｽ", "データ・ベース"]
+    
+  - expected: "ログイン"
+    patterns: ["ログ・イン", "login", "log in", "log-in"]
+    
